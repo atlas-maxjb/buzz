@@ -53,7 +53,7 @@ fn enroll(request: &Value) -> Value {
         _ => return error("agent payload is required"),
     };
 
-    let mut args = vec!["-o".into(), "BatchMode=yes".into()];
+    let mut args: Vec<String> = vec!["-o".into(), "BatchMode=yes".into()];
     if let Some(port) = config.get("port").and_then(Value::as_str).filter(|v| !v.is_empty()) {
         args.extend(["-p".into(), port.into()]);
     }
