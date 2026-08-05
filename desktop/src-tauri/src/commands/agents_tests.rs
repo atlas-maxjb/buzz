@@ -499,5 +499,6 @@ fn tauri_platform_configs_bundle_kubernetes_only_on_supported_hosts() {
             has_kubernetes, expected,
             "unexpected Kubernetes externalBin for {target}; merged {paths:?}"
         );
+        assert!(external_bins.iter().any(|value| value == "binaries/buzz-backend-openclaw"));
     }
 }

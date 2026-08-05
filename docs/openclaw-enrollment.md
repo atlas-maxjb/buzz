@@ -1,9 +1,10 @@
 # OpenClaw provider enrollment
 
 Buzz Desktop exposes remote run locations through discovered executables named
-`buzz-backend-<id>`. An OpenClaw integration should install
-`buzz-backend-openclaw` on the Desktop machine; it will then appear under
-**Run on** without Buzz Desktop becoming a Gateway or runtime proxy.
+`buzz-backend-<id>`. The Desktop DMG bundles `buzz-backend-openclaw`, so
+OpenClaw appears under **Run on** immediately after installing Buzz; no
+separate provider installation is required. Existing user-installed providers
+continue to be discovered through PATH.
 
 ## Provider contract
 
@@ -72,7 +73,8 @@ After `info`, Desktop invokes the same staged provider binary once with:
 ```
 
 The exact managed-agent payload is the source of truth; providers must not
-reconstruct identity from `env_vars`. The provider uses SSH only for this
+reconstruct identity from `env_vars`. The bundled provider uses the system SSH
+client only for this
 one-time handoff, running `openclaw buzz enroll --stdin` on the remote host.
 It imports the identity and room configuration into OpenClaw and returns a
 stable host-side identifier:
