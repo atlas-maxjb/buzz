@@ -1,8 +1,8 @@
 //! One-shot OpenClaw enrollment provider bundled with Buzz Desktop.
 //!
-//! The provider only uses SSH for enrollment.  OpenClaw subsequently connects
-//! directly to Buzz using the relay details in the v1 payload; this process is
-//! never a runtime proxy.
+//! The normal path uses a one-time enrollment code. An explicit host opts into
+//! the SSH fallback. OpenClaw subsequently connects directly to Buzz using the
+//! relay details in the v1 payload; this process is never a runtime proxy.
 
 use serde_json::{json, Value};
 use std::io::Read;
@@ -14,15 +14,16 @@ fn info() -> Value {
         "name": "openclaw",
         "version": env!("CARGO_PKG_VERSION"),
         "protocol_version": 1,
-        "description": "Enrolls agents with an OpenClaw host over SSH",
+        "description": "Enrolls agents with OpenClaw using a one-time code",
         "config_schema": {
             "type": "object",
             "properties": {
-                "host": { "type": "string", "description": "SSH destination, e.g. openclaw@agent-host" },
-                "rooms": { "type": "string", "description": "Comma-separated Buzz room UUIDs" },
+                "enrollment_code": { "type": "string", "title": "One-time enrollment code", "description": "Paste the code shown by OpenClaw" },
+                "rooms": { "type": "string", "format": "buzz-room-picker", "description": "Buzz rooms selected in Desktop" },
+                "host": { "type": "string", "title": "SSH host (advanced)", "description": "Optional SSH destination, e.g. openclaw@agent-host" },
                 "port": { "type": "string", "description": "Optional SSH port" }
             },
-            "required": ["host", "rooms"]
+            "required": ["enrollment_code", "rooms"]
         },
         "enrollment": {
             "operation": "enroll",
@@ -41,9 +42,9 @@ fn enroll(request: &Value) -> Value {
         Some(config) => config,
         None => return error("provider_config must be an object"),
     };
-    let host = match config.get("host").and_then(Value::as_str).filter(|v| !v.is_empty()) {
-        Some(host) => host,
-        None => return error("provider_config.host is required"),
+    let code = match config.get("enrollment_code").and_then(Value::as_str).filter(|v| !v.is_empty()) {
+        Some(code) => code,
+        None => return error("provider_config.enrollment_code is required"),
     };
     if config.get("rooms").and_then(Value::as_str).is_none() {
         return error("provider_config.rooms is required");
@@ -53,15 +54,23 @@ fn enroll(request: &Value) -> Value {
         _ => return error("agent payload is required"),
     };
 
-    let mut args: Vec<String> = vec!["-o".into(), "BatchMode=yes".into()];
-    if let Some(port) = config.get("port").and_then(Value::as_str).filter(|v| !v.is_empty()) {
-        args.extend(["-p".into(), port.into()]);
+    let host = config.get("host").and_then(Value::as_str).filter(|v| !v.is_empty());
+    let mut args: Vec<String> = if host.is_some() { vec!["-o".into(), "BatchMode=yes".into()] } else { Vec::new() };
+    if let Some(host) = host {
+        if let Some(port) = config.get("port").and_then(Value::as_str).filter(|v| !v.is_empty()) {
+            args.extend(["-p".into(), port.into()]);
+        }
+        args.push(host.into());
     }
-    args.extend([host.into(), "openclaw".into(), "buzz".into(), "enroll".into(), "--stdin".into()]);
+    args.extend(["openclaw".into(), "buzz".into(), "enroll".into(), "--code".into(), code.into(), "--stdin".into()]);
 
     // Tests may provide a fake ssh executable. Production always uses the
     // user's normal ssh trust/agent configuration.
-    let command = std::env::var_os("BUZZ_OPENCLAW_SSH").unwrap_or_else(|| "ssh".into());
+    let command = if host.is_some() {
+        std::env::var_os("BUZZ_OPENCLAW_SSH").unwrap_or_else(|| "ssh".into())
+    } else {
+        "openclaw".into()
+    };
     let mut child = match Command::new(command).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(child) => child,
         Err(_) => return error("could not start ssh"),
@@ -116,9 +125,15 @@ mod tests {
         assert_eq!(info()["enrollment"]["one_time"], true);
     }
     #[test]
-    fn rejects_missing_host_without_invoking_ssh() {
+    fn info_prefers_code_and_marks_rooms_for_desktop_picker() {
+        assert_eq!(info()["config_schema"]["required"], json!(["enrollment_code", "rooms"]));
+        assert_eq!(info()["config_schema"]["properties"]["rooms"]["format"], "buzz-room-picker");
+    }
+
+    #[test]
+    fn rejects_missing_code_without_invoking_ssh() {
         let response = respond(json!({"op":"enroll", "enrollment":{"version":1}, "agent":{}}));
         assert_eq!(response["ok"], false);
-        assert!(response["error"].as_str().unwrap().contains("host"));
+        assert!(response["error"].as_str().unwrap().contains("enrollment_code"));
     }
 }

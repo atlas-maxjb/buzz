@@ -21,11 +21,12 @@ must answer `info` first, with protocol version `1`:
   "config_schema": {
     "type": "object",
     "properties": {
-      "host": { "type": "string", "description": "SSH destination, e.g. openclaw@agent-host" },
-      "rooms": { "type": "string", "description": "Comma-separated Buzz room UUIDs" },
+      "enrollment_code": { "type": "string", "title": "One-time enrollment code", "description": "Paste the code shown by OpenClaw" },
+      "rooms": { "type": "string", "format": "buzz-room-picker", "description": "Buzz rooms selected in Desktop" },
+      "host": { "type": "string", "description": "Optional SSH destination (advanced fallback)" },
       "port": { "type": "string", "description": "Optional SSH port" }
     },
-    "required": ["host", "rooms"]
+    "required": ["enrollment_code", "rooms"]
   },
   "enrollment": {
     "operation": "enroll",
@@ -64,7 +65,7 @@ After `info`, Desktop invokes the same staged provider binary once with:
     }
   },
   "provider_config": {
-    "host": "openclaw@agent-host",
+    "enrollment_code": "one-time-code",
     "rooms": "ROOM_UUID_1,ROOM_UUID_2",
     "port": "22"
   },
@@ -73,9 +74,12 @@ After `info`, Desktop invokes the same staged provider binary once with:
 ```
 
 The exact managed-agent payload is the source of truth; providers must not
-reconstruct identity from `env_vars`. The bundled provider uses the system SSH
-client only for this
-one-time handoff, running `openclaw buzz enroll --stdin` on the remote host.
+reconstruct identity from `env_vars`. The default handoff uses the one-time
+code and runs `openclaw buzz enroll --code <code> --stdin` locally. Supplying
+`host` opts into the advanced SSH fallback and runs the same command remotely.
+The `enrollment.version: 1` object is the stable boundary owned jointly by
+Desktop and the OpenClaw worker; Desktop supplies selected room IDs as the
+comma-separated `rooms` value and does not ask users to type UUIDs.
 It imports the identity and room configuration into OpenClaw and returns a
 stable host-side identifier:
 
