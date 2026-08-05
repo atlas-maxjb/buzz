@@ -45,12 +45,13 @@ jobs:
           ./scripts/bundle-sidecars.sh
 
       - name: Build unsigned DMG
-        run: cd desktop && pnpm tauri build --verbose --no-sign --config src-tauri/tauri.conf.json
+        run: cd desktop && pnpm tauri build --verbose --no-sign --bundles dmg --config src-tauri/tauri.conf.json
 
       - name: Upload DMG to fork release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DMG=$(find desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' -type f | head -1)
-          test -n "$DMG"
+          DMG_COUNT=$(find desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' -type f | wc -l | tr -d ' ')
+          test "$DMG_COUNT" -eq 1
+          DMG=$(find desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' -type f -print)
           gh release upload "$GITHUB_REF_NAME" "$DMG" --repo "$GITHUB_REPOSITORY" --clobber
